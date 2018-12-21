@@ -1,0 +1,99 @@
+Parsing Replay files
+0=Filter
+1=Encryptor
+2=Destructor
+3=Ping
+4=EMP,
+5=Scrambler
+6=Remove
+
+p1Stats: [health, cores, bits, time_of_last_turn]
+
+p1Units: [filters, encryptors, Destructors, ping?, EMP?, Scrambler? Remove?]
+sublists of p1Units: [x, y, stability, id]
+
+turnInfo: [state_type, turn_number, frame_number]
+
+state_type:
+
+0 for beginning of turn, system is waiting for deploy
+information. 3s time limit here. We run on_turn function
+1 for action phase, e.g., a single frame. We could run
+something like self.on_frame() here in the algorithm.
+2 for end of game. That’s all folks.
+turn_number: Pretty clear
+
+frame_number: -1, 0, or > 0
+I believe that this always starts at -1 where the turn is
+initializing. If neither player has spawned any units, the
+next frame is frame 0 where presumably the map becomes visible
+for both players, and then the turn ends. However, if a
+player has spawned units, the frame counter then continually
+
+Tested and confirmed the “selfDestruct” segment, broken down below.
+
+Note that in accordance with the rules, an information unit that travels less than 5 spaces before running out of move options does not self destruct (does no damage) but does get removed from play. I’ve confirmed that such units that run out of moves do not appear in the “selfDestruct” segment, only in the “death” segment. An IU that travels at least 5 spaces before getting stuck appears in both the “selfDestruct” and “death” segments.
+
+“selfDestruct”:[[[25,13], # x,y position of the self-destructed unit
+[[24,14], # x,y position of an affected unit
+[25,14], # x,y position of a second affected unit
+[26,14]], # x,y position of a third affected unit
+15.0, # damage dealt ( = starting stability of the self-destructing unit)
+3, # Type code of unit that self destructed (3 = Ping, 4=EMP, 5=Scrambler)
+“155”, # id of self destructing unit
+1]], # player number (1 or 2) who owned the self-destructing unit
+
+Tested and confirmed the “breach” segment. One entry in this segment appears for every Information Unit that makes it to the opponent’s opposite edge and scores, dealing health damage. IU’s that appear in the “breach” segment also appear in the “death” segment of the same frame as they are removed from the board.
+
+“breach”:[[[13,27], # x,y position where IU hit opponents edge
+1.0, # Amount of health damage done to opponent (always 1.0)
+3, # Type code of unit that hit (3 = Ping, 4 = EMP, 5 = Scrambler)
+“7”, # id of unit that scored
+1]], # Owner of the scoring unit (1 = Player1, 2 = Player2)
+
+Tested and confirmed the “damage” segment. One entry appears for every instance of damage dealt to any unit. The same unit can appear multiple times, once for each source of damage that turn. Damage can come from enemy units attacking or self-destructing, each of which have corresponding entries in the “attack” and “selfDestruct” segments.
+
+“damage”:[[[27,14], # x,y position of unit which took damage
+1.0, # amount of damage done (depends on attacking unit)
+0, # Type code of unit which took damage (0 = Filter, 1 = Encryptor, 2 = Decryptor, 3 = Ping, 4 = EMP, 5 = Scrambler)
+“4”, # id of unit which took damage
+2]], # Owner of unit which took damage (1 = Player1, 2 = Player2)
+
+Tested and confirmed the “shield” segment. One entry appears for every instance of a shield being applied to an Information Unit. The same IU can appear in the segment multiple times, each time affected by a different encryptor. The same encryptor can appear in the segment multiple times, each time shielding a different IU. Affected IU’s entries in the “p1Units” segment reflect the shielded amount in the same frame. Note that the decay on shields does not seem to be indicated in any special way and can only be seen as its effect on IU stability values.
+
+“shield”:[[[1,13], # x,y position of shield-giving unit
+[2,11], # x,y position of shield-receiving unit
+10.0, # amount of shield given
+1, # Probably type code of shield-giving unit (Always 1 = Encryptor)
+“54”, # id of the shield-giving unit
+“117”, # id of the shield-receiving unit
+1]], # Owner of the units (1 = Player1, 2 = Player2)
+
+Tested and confirmed the “move” segment. The 3rd value of each move seems to always be [0,0], still not sure what that represents. Note that newly spawned units do not move in the same frame they spawned in but their spawn frame counts towards their next move (A ping spawned on turn 0 will first move on turn 1).
+
+“move”:[[[2,11], # x,y starting position of unit
+[2,12], # x,y ending position of unit
+[0,0], # ???
+3, # Type code of unit (3 = Ping, 4 = EMP, 5 = Scrambler)
+“117”, # id of unit
+1]], # Owner of the unit (1 = Player1, 2 = Player2)
+
+Tested and confirmed the “death” segment. Units removed from play for any reason show in this segment (attacked to death, successfully breached opposite edge, self-destructed, removed by owner).
+
+“death”:[[[13,27], # x,y position of unit
+3, # Type code of unit (0 = Filter, 1 = Encryptor, 2 = Destructor, 3 = Ping, 4 = EMP, 5 = Scrambler)
+“7”, # id of unit
+1, # Owner of unit (1 = Player1, 2 = Player2)
+false]], # Unit was destroyed by a “Remove” command (true/false)
+
+Last one, since “melee” seems to be completely unused.
+
+Tested and confirmed the “attack” segment.
+
+“attack”:[[[0,13], # x,y position of attacking unit
+[0,14], # x,y position of target unit
+1.0, # damage of attack
+3, # Type code of attacking unit (2 = Destructor, 3 = Ping, 4 = EMP, 5 = Scrambler)
+“117”, # id of attacking unit
+“60”, # id of target unit
+1]], # Owner of attacking unit (1 = Player1, 2 = Player2)
