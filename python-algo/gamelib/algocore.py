@@ -27,6 +27,9 @@ class AlgoCore(object):
         """
         self.submit_default_turn()
 
+    def on_frame(self, game_state):
+        pass
+
     def submit_default_turn(self):
         send_command("")
         send_command("")
@@ -62,7 +65,7 @@ class AlgoCore(object):
                     """
                     If stateType == 1, this game_state_string string represents the results of an action phase
                     """
-                    continue
+                    self.on_frame(game_state)
                 elif stateType == 2:
                     """
                     This is the end game message. This means the game is over so break and finish the program.

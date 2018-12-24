@@ -26,6 +26,13 @@ class AlgoStrategy(gamelib.AlgoCore):
     def __init__(self):
         super().__init__()
         random.seed()
+        self.init_destructor = [[5,10],[9,9],[14,9],[18,9],[22,10]]
+        self.init_encryptor = [[24,12]]
+        self.init_filter = [[0,13],[1,13],[2,13],[22,13],[23,13],[13,10]]
+        self.reinforcement_position = [[],[],[],[],[],[],[]]
+        self.reconstruct = []
+        self.unitDict = {0:FILTER, 1:ENCRYPTOR, 2:DESTRUCTOR, 3:PING, 4:EMP, 5:SCRAMBLER}
+        
 
     def on_game_start(self, config):
         """ 
@@ -53,17 +60,54 @@ class AlgoStrategy(gamelib.AlgoCore):
         game_state = gamelib.GameState(self.config, turn_state)
         gamelib.debug_write('Performing turn {} of your custom algo strategy'.format(game_state.turn_number))
         game_state.suppress_warnings(True)  #Uncomment this line to suppress warnings.
-        self.prev_state = json.loads(turn_state)
-        gamelib.debug_write(self.prev_state["events"]["damage"])
-        self.starter_strategy(game_state)
-
+        self.prev_frame_state = json.loads(turn_state)
+        gamelib.debug_write(self.prev_state["events"])
+        for i in range(len(self.weak_point)):
+            if self.weak_point[i] != 0:
+                reinforcement.append((self.weak_point[i],i))
+        reinforcement.sort(key=lambda reinforcement: reinforcement[0])
+        self.starter_strategy(game_state, reinforcement)
+        self.weak_point = [0] * 6
         game_state.submit_turn()
+
+    def on_frame(self, frame_state):
+        game_state = gamelib.GameState(self.config, turn_state)
+        game_state.suppress_warnings(True)  #Uncomment this line to suppress warnings.
+        curr_frame_state = json.loads(frame_state)
+        events = curr_frame_state.get("events")
+        breach = events.get("breach")
+        death = events.get("death")
+        if (breach != []):
+            for position in breach:
+                if position[4] == 2:
+                    region = self.get_region(position[0][0])
+                    self.weak_point[region] += 1
+        if (death != []):
+            for dead in death:
+                if dead[4] == 1 and (dead[1] in [0,1,2]) and dead[5] == False:
+                    self.reconstruct.append(dead)
+
+        self.prev_frame_state = curr_frame_state
+
+    def get_region(self, x):
+        if x <= 4:
+            return 0
+        elif x < 7:
+            return 1
+        elif x < 14:
+            return 2
+        elif x < 20:
+            return 3:
+        elif x < 23:
+            return 4
+        else:
+            return 5
 
     """
     NOTE: All the methods after this point are part of the sample starter-algo
     strategy and can safey be replaced for your custom algo.
     """
-    def starter_strategy(self, game_state):
+    def starter_strategy(self, game_state, reinforcement):
         """
         Build the C1 logo. Calling this method first prioritises
         resources to build and repair the logo before spending them 
@@ -74,7 +118,7 @@ class AlgoStrategy(gamelib.AlgoCore):
         """
         Then build additional defenses.
         """
-        self.build_defences(game_state)
+        self.build_defences(game_state, reinforcement)
 
         """
         Finally deploy our information units to attack.
@@ -83,7 +127,18 @@ class AlgoStrategy(gamelib.AlgoCore):
 
     # Here we make the C1 Logo!
     def build_c1_logo(self, game_state):
-
+        if game_state.turn_number == 0:
+            for location in self.init_destructor:
+                game_state.attempt_spawn(DESTRUCTOR, location)
+            for location in self.init_encryptor:
+                game_state.attempt_spawn(ENCRYPTOR, location)
+            for location in self.init_filter:
+                game_state.attempt_spawn(FILTER, location)
+        
+        for item in self.reconstruct:
+            if game_state.can_spawn(self.unitDict[item[1]],item[0]):
+                game_state.attempt_spawn(self.unitDict[item[1]],item[0])
+        
         # starter location
         firewall_locations = [[3,13],[4,13]]
         for location in firewall_locations:
@@ -142,7 +197,7 @@ class AlgoStrategy(gamelib.AlgoCore):
             if game_state.can_spawn(FILTER, location):
                 game_state.attempt_spawn(FILTER, location)
 
-    def build_defences(self, game_state):
+    def build_defences(self, game_state, reinforcement):
         firewall_locations = [[int(j*2),10] for j in reversed(range(4,12))]
         for location in firewall_locations:
             if game_state.can_spawn(DESTRUCTOR, location):
